@@ -30,6 +30,7 @@ require 'guestfs'
 
 class OsCreds 
     # Get credentials from environment
+    # TODO: add other backends, like a config.rb
     def initialize()
         @username = ENV['OS_USERNAME']
         @tenant_name = ENV['OS_TENANT_NAME']
@@ -104,17 +105,10 @@ def openstack_guest_inspect disk
 end 
 
 def openstack_get_hypervisors oscreds
-    printf("Openstack Username: %s\n",oscreds.username);
-    # hypervisors = ["bob", "john", "moe"]
-    # fog doesn't yet have hypervisor-list api support
-    *hypervisors = `nova hypervisor-list | grep -v "Hypervisor hostname" | grep -v "+----+" | awk '{ print $4 }'`
+    # debug: printf("Openstack Username: %s\n",oscreds.username);
+    # fog doesn't yet have hypervisor-list api support! Ugh
+    *hypervisors = `nova hypervisor-list | grep -v "Hypervisor hostname" | grep -v "+----" | awk '{ print $4 }'`
     return hypervisors
-end
-
-def openstack_sshfs_mount hypervisor
-end
-
-def openstack_sshfs_unmount hypervisor
 end
 
 # Import OpenStack credentials
@@ -137,19 +131,25 @@ end
 # Get hypervisor list
 oshypes = openstack_get_hypervisors(oscreds)
 for oshype in oshypes do
-    puts oshype
+    # Mount hypervisor
+    oshype = oshype.chomp
+    printf("Mounting hypervisor: %s\n", oshype)
+    unless system("sshfs root\@#{oshype}\:/var/lib/nova /var/lib/nova") 
+        printf("Failed to mount hypervisor %s\n",oshype);
+        printf("Exiting\n");
+        exit 1;
+    end
+    # Find and inspect nova "disks"
+    novadirs = Dir["/var/lib/nova/instances/**/disk"]
+    for ndisk in novadirs do
+        results = ndisk.match(/instances\/(.*)\/disk/)
+        ninstance = results.captures[0]
+        printf("Instance: %s\n", ninstance)
+        openstack_guest_inspect(ndisk)
+        puts
+    end
+
+    # Unmount hypervisor
+    # TODO: Need to fix this unmount. Complains dev is busy
+    # system("fusermount -uv /var/lib/nova")
 end
-
-# Mount hypervisor
-
-# Find and inspect nova "disks"
-novadirs = Dir["/var/lib/nova/instances/**/disk"]
-for ndisk in novadirs do
-    results = ndisk.match(/instances\/(.*)\/disk/)
-    ninstance = results.captures[0]
-    printf("Instance: %s\n", ninstance)
-    openstack_guest_inspect(ndisk)
-    puts
-end
-
-# Unmount hypervisor
