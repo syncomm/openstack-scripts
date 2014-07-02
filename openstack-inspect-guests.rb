@@ -140,8 +140,6 @@ module OSInspect
   end
 
   def OSInspect.main
-    # Import OpenStack credentials
-    oscreds = OsCreds.new
 
     # Exit if not running as root
     if ENV['USER'] != "root" 
@@ -150,15 +148,18 @@ module OSInspect
       exit 1;
     end
 
-    # Exit if not admin credentials for OpenStack
-    if (oscreds.username != "admin") 
-      printf("Openstack Username: %s != admin! You must have OpenStack admin privilages\n",oscreds.username);
-      printf("Exiting!\n");
-      exit 1;
-    end
-
     # Get hypervisor list
     if ARGV[0] == "-a"
+      # Import OpenStack credentials
+      oscreds = OsCreds.new
+      
+      # Exit if not admin credentials for OpenStack
+      if (oscreds.username != "admin") 
+        printf("Openstack Username: %s != admin! You must have OpenStack admin privilages\n",oscreds.username);
+        printf("Exiting!\n");
+        exit 1;
+      end
+
       oshypes = OSInspect.get_hypervisors(oscreds)
     else
       *oshypes = ARGV
