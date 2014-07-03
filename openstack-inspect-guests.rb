@@ -140,7 +140,6 @@ module OSInspect
   end
 
   def OSInspect.main
-
     # Exit if not running as root
     if ENV['USER'] != "root" 
       printf("openstack-guest-inspect.rb must be run as root!\n");
@@ -161,37 +160,28 @@ module OSInspect
       opt.separator  "                   the hypervisors to process."
       opt.separator  ""
       opt.separator  "Options"
-      opt.separator  "     -a     Query hypervisor list from Nova and process every hypervisor"
-      opt.separator  "     -h     Help"
-      opt.separator  ""
-      opt.separator  "     --os-username <auth-user-name>      Defaults to env[OS_USERNAME]."
-      opt.separator  "     --os-password <auth-password>       Defaults to env[OS_PASSWORD]."
-      opt.separator  "     --os-tenant-name <auth-tenant-name> Defaults to env[OS_TENANT_NAME]."
-      opt.separator  "     --os-auth-url <auth-url>            Defaults to env[OS_AUTH_URL]."
-      opt.separator  "     --os-region-name <region-name>      Defaults to env[OS_REGION_NAME]."
-      opt.separator  ""
 
-      opt.on("-a","Process all hypervisors") do
+      opt.on("-a","Process all hypervisors from nova") do
         options[:all_hypes] = true;
-      end
-
-      opt.on("--os-username","--os-username <auth-user-name>") do |username|
-        oscreds.username = username
-      end
-      opt.on("--os-tenant-name","--os-tenant-name <auth-tenant-name>") do |tenant_name|
-        oscreds.tenant_name = tenant_name
-      end
-      opt.on("--os-auth-url","--os-auth-url <auth-url>") do |auth_url|
-        oscreds.auth_url = auth_url
-      end
-      opt.on("--os-region-name","--os-region-name <region-name>") do |region_name|
-        oscreds.region_name = region_name
-      end
-      opt.on("--os-password","--os-password <auth-password>") do |password|
-        oscreds.password = password
       end
       opt.on("-h","--help","help") do
         puts opt_parser
+        exit 1
+      end
+      opt.on("--os-username","--os-username <auth-user-name>      Defaults to env[OS_USERNAME].") do |username|
+        oscreds.username = username
+      end
+      opt.on("--os-tenant-name","--os-tenant-name <auth-tenant-name> Defaults to env[OS_PASSWORD].") do |tenant_name|
+        oscreds.tenant_name = tenant_name
+      end
+      opt.on("--os-auth-url","--os-auth-url <auth-url>            Defaults to env[OS_AUTH_URL].") do |auth_url|
+        oscreds.auth_url = auth_url
+      end
+      opt.on("--os-region-name","--os-region-name <region-name>      Defaults to env[OS_REGION_NAME]].") do |region_name|
+        oscreds.region_name = region_name
+      end
+      opt.on("--os-password","--os-password <auth-password>       Defaults to env[OS_PASSWORD].") do |password|
+        oscreds.password = password
       end
     end
 
@@ -223,6 +213,7 @@ module OSInspect
       end
       # Find and inspect nova "disks"
       novadirs = Dir["/var/lib/nova/instances/**/disk"]
+      printf("Found %d guests\n",novadirs.length)
       instances = {}
       for ndisk in novadirs do
         results = ndisk.match(/instances\/(.*)\/disk/)
