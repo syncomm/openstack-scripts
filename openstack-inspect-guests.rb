@@ -27,12 +27,12 @@
 #########################################################################
 
 require 'guestfs'
+require 'optparse'
 
 module OSInspect
 
   class OsCreds 
-    # Get credentials from environment
-    # TODO: add other backends, like a config.rb
+    # Get default credentials from environment
     def initialize()
       @username = ENV['OS_USERNAME']
       @tenant_name = ENV['OS_TENANT_NAME']
@@ -147,23 +147,71 @@ module OSInspect
       printf("Exiting!\n");
       exit 1;
     end
+    
+    oscreds = OsCreds.new
+    options = {}
+    options[:all_hypes] = false
 
-    # Get hypervisor list
-    if ARGV[0] == "-a"
-      # Import OpenStack credentials
-      oscreds = OsCreds.new
-      
+    # Parse CLI options
+    opt_parser = OptionParser.new do |opt|
+      opt.banner = "Usage: openstack-inspect-guests [-a || HYPERVISORS]"
+      opt.separator  ""
+      opt.separator  "Arguments:"
+      opt.separator  "     HYPERVISORS   The hostnames or ip addesses of"
+      opt.separator  "                   the hypervisors to process."
+      opt.separator  ""
+      opt.separator  "Options"
+      opt.separator  "     -a     Query hypervisor list from Nova and process every hypervisor"
+      opt.separator  "     -h     Help"
+      opt.separator  ""
+      opt.separator  "     --os-username <auth-user-name>      Defaults to env[OS_USERNAME]."
+      opt.separator  "     --os-password <auth-password>       Defaults to env[OS_PASSWORD]."
+      opt.separator  "     --os-tenant-name <auth-tenant-name> Defaults to env[OS_TENANT_NAME]."
+      opt.separator  "     --os-auth-url <auth-url>            Defaults to env[OS_AUTH_URL]."
+      opt.separator  "     --os-region-name <region-name>      Defaults to env[OS_REGION_NAME]."
+      opt.separator  ""
+
+      opt.on("-a","Process all hypervisors") do
+        options[:all_hypes] = true;
+      end
+
+      opt.on("--os-username","--os-username <auth-user-name>") do |username|
+        oscreds.username = username
+      end
+      opt.on("--os-tenant-name","--os-tenant-name <auth-tenant-name>") do |tenant_name|
+        oscreds.tenant_name = tenant_name
+      end
+      opt.on("--os-auth-url","--os-auth-url <auth-url>") do |auth_url|
+        oscreds.auth_url = auth_url
+      end
+      opt.on("--os-region-name","--os-region-name <region-name>") do |region_name|
+        oscreds.region_name = region_name
+      end
+      opt.on("--os-password","--os-password <auth-password>") do |password|
+        oscreds.password = password
+      end
+      opt.on("-h","--help","help") do
+        puts opt_parser
+      end
+    end
+
+    opt_parser.parse!
+
+    if (ARGV[0])
+      *oshypes = ARGV
+    elsif (options[:all_hypes])
       # Exit if not admin credentials for OpenStack
       if (oscreds.username != "admin") 
         printf("Openstack Username: %s != admin! You must have OpenStack admin privilages\n",oscreds.username);
         printf("Exiting!\n");
         exit 1;
       end
-
       oshypes = OSInspect.get_hypervisors(oscreds)
     else
-      *oshypes = ARGV
+      puts opt_parser
+      exit 1
     end
+    
     for oshype in oshypes do
       # Mount hypervisor
       oshype = oshype.chomp
