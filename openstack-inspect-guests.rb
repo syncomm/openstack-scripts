@@ -133,27 +133,83 @@ module OSInspect
   end 
 
   def OSInspect.get_hypervisors oscreds
+    # Exit if not admin credentials for OpenStack
+    if (oscreds.username != "admin") 
+      printf("Openstack Username: %s != admin! You must have OpenStack admin privilages\n",oscreds.username);
+      printf("Exiting!\n");
+      exit 1;
+    end
     # debug: printf("Openstack Username: %s\n",oscreds.username);
     # fog doesn't yet have hypervisor-list api support! Ugh
     *hypervisors = `nova hypervisor-list | grep -v "Hypervisor hostname" | grep -v "+----" | awk '{ print $4 }'`
     return hypervisors
   end
 
+  def OSInspect.get_instance instance,oscreds
+    printf("Finding Instance %s ... ", instance)
+    # Get list of hypervisors
+    oshypes = OSInspect.get_hypervisors(oscreds)
+    # Search for instance
+    for oshype in oshypes do
+      oshype = oshype.chomp
+      # Once again... not in fog yet! 
+      *instance_list = `nova hypervisor-servers #{oshype} | grep -v "Hypervisor Hostname" | grep -v "+----" | awk '{print $2}'`
+      if instance_list.grep(/#{instance}/).any?
+        printf("[FOUND]\n")
+        guest_instance = OsGuest.new
+        printf("Mounting hypervisor: %s\n", oshype)
+        # unless system("sshfs -o Ciphers=arcfour -o Compression=no root\@#{oshype}\:/var/lib/nova /var/lib/nova") 
+        unless system("sshfs root\@#{oshype}\:/var/lib/nova /var/lib/nova") 
+          printf("Failed to mount hypervisor %s\n",oshype);
+          printf("Exiting\n");
+          exit 1;
+        end
+        ndisk = "/var/lib/nova/instances/#{instance}/disk"
+        printf("Processing: %s ... ", instance)
+        starttime = Time.now.to_i
+        guest_instance = OSInspect.inspect_disk(ndisk)
+        endtime = Time.now.to_i
+        printf("[%d seconds]\n", endtime-starttime)
+        # Unmount hypervisor
+        # TODO: Need to fix this unmount. Complains dev is busy
+        system("fusermount -u -z /var/lib/nova")
+        return guest_instance 
+      else 
+        printf("[NOT FOUND]\n")
+        exit 1
+      end
+    end
+
+    guest_instance = OsGuest.new
+    return guest_instance
+  end
+  
+  def OSInspect.show_guest_human instance
+    printf("  Product name: %s\n", instance.product)
+    printf("  Type:         %s\n", instance.type)
+    printf("  Version:      %s\n", instance.version)
+    printf("  Distro:       %s\n", instance.distro)
+    printf("  Arch:         %s\n", instance.arch)
+    printf("  Hostname:     %s\n", instance.hostname)
+    printf("  Drives:       %s\n", instance.drives)
+  end
+
   def OSInspect.main
     # Exit if not running as root
     if ENV['USER'] != "root" 
-      printf("openstack-guest-inspect.rb must be run as root!\n");
-      printf("Exiting!\n");
+      printf("openstack-guest-inspect.rb must be run as root!\n")
+      printf("Exiting!\n")
       exit 1;
     end
     
     oscreds = OsCreds.new
     options = {}
     options[:all_hypes] = false
+    options[:instance] = ""
 
     # Parse CLI options
     opt_parser = OptionParser.new do |opt|
-      opt.banner = "Usage: openstack-inspect-guests [-a || HYPERVISORS]"
+      opt.banner = "Usage: openstack-inspect-guests.rb [OPTIONS] [HYPERVISORS]"
       opt.separator  ""
       opt.separator  "Arguments:"
       opt.separator  "     HYPERVISORS   The hostnames or ip addesses of"
@@ -161,41 +217,44 @@ module OSInspect
       opt.separator  ""
       opt.separator  "Options"
 
-      opt.on("-a","Process all hypervisors from nova") do
-        options[:all_hypes] = true;
+      opt.on("-a","--all","Process all hypervisors from nova") do
+        options[:all_hypes] = true
+      end
+      opt.on("-i <instance-id>","--instance <instance-id>","Only query the specified instance") do |instance|
+        options[:instance] = instance
       end
       opt.on("-h","--help","help") do
         puts opt_parser
         exit 1
       end
-      opt.on("--os-username","--os-username <auth-user-name>      Defaults to env[OS_USERNAME].") do |username|
+      opt.on("--os-username","--os-username <auth-user-name>      Defaults to env[OS_USERNAME]") do |username|
         oscreds.username = username
       end
-      opt.on("--os-tenant-name","--os-tenant-name <auth-tenant-name> Defaults to env[OS_PASSWORD].") do |tenant_name|
+      opt.on("--os-tenant-name","--os-tenant-name <auth-tenant-name> Defaults to env[OS_PASSWORD]") do |tenant_name|
         oscreds.tenant_name = tenant_name
       end
-      opt.on("--os-auth-url","--os-auth-url <auth-url>            Defaults to env[OS_AUTH_URL].") do |auth_url|
+      opt.on("--os-auth-url","--os-auth-url <auth-url>            Defaults to env[OS_AUTH_URL]") do |auth_url|
         oscreds.auth_url = auth_url
       end
-      opt.on("--os-region-name","--os-region-name <region-name>      Defaults to env[OS_REGION_NAME]].") do |region_name|
+      opt.on("--os-region-name","--os-region-name <region-name>      Defaults to env[OS_REGION_NAME]") do |region_name|
         oscreds.region_name = region_name
       end
-      opt.on("--os-password","--os-password <auth-password>       Defaults to env[OS_PASSWORD].") do |password|
+      opt.on("--os-password","--os-password <auth-password>       Defaults to env[OS_PASSWORD]") do |password|
         oscreds.password = password
       end
     end
 
     opt_parser.parse!
-
+   
+    if (options[:instance] != "")
+        guest_instance = OsGuest.new
+        guest_instance = OSInspect.get_instance(options[:instance], oscreds)
+        OSInspect.show_guest_human(guest_instance)
+        exit 0
+    end
     if (ARGV[0])
       *oshypes = ARGV
     elsif (options[:all_hypes])
-      # Exit if not admin credentials for OpenStack
-      if (oscreds.username != "admin") 
-        printf("Openstack Username: %s != admin! You must have OpenStack admin privilages\n",oscreds.username);
-        printf("Exiting!\n");
-        exit 1;
-      end
       oshypes = OSInspect.get_hypervisors(oscreds)
     else
       puts opt_parser
@@ -206,6 +265,7 @@ module OSInspect
       # Mount hypervisor
       oshype = oshype.chomp
       printf("Mounting hypervisor: %s\n", oshype)
+      # unless system("sshfs -o Ciphers=arcfour -o Compression=no root\@#{oshype}\:/var/lib/nova /var/lib/nova") 
       unless system("sshfs root\@#{oshype}\:/var/lib/nova /var/lib/nova") 
         printf("Failed to mount hypervisor %s\n",oshype);
         printf("Exiting\n");
@@ -229,13 +289,7 @@ module OSInspect
       # Output 
       instances.each_key do |instance|
         printf("Instance %s\n", instance)
-        printf("  Product name: %s\n", instances[instance].product)
-        printf("  Type:         %s\n", instances[instance].type)
-        printf("  Version:      %s\n", instances[instance].version)
-        printf("  Distro:       %s\n", instances[instance].distro)
-        printf("  Arch:         %s\n", instances[instance].arch)
-        printf("  Hostname:     %s\n", instances[instance].hostname)
-        printf("  Drives:       %s\n", instances[instance].drives)
+        OSInspect.show_guest_human(instances[instance])
       end
       # Unmount hypervisor
       # TODO: Need to fix this unmount. Complains dev is busy
