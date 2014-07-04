@@ -147,39 +147,33 @@ module OSInspect
 
   def OSInspect.get_instance instance,oscreds
     printf("Finding Instance %s ... ", instance)
-    # Get list of hypervisors
-    oshypes = OSInspect.get_hypervisors(oscreds)
     # Search for instance
-    for oshype in oshypes do
-      oshype = oshype.chomp
-      # Once again... not in fog yet! 
-      *instance_list = `nova hypervisor-servers #{oshype} | grep -v "Hypervisor Hostname" | grep -v "+----" | awk '{print $2}'`
-      if instance_list.grep(/#{instance}/).any?
-        printf("[FOUND]\n")
-        guest_instance = OsGuest.new
-        printf("Mounting hypervisor: %s\n", oshype)
-        # unless system("sshfs -o Ciphers=arcfour -o Compression=no root\@#{oshype}\:/var/lib/nova /var/lib/nova") 
-        unless system("sshfs root\@#{oshype}\:/var/lib/nova /var/lib/nova") 
-          printf("Failed to mount hypervisor %s\n",oshype);
-          printf("Exiting\n");
-          exit 1;
-        end
-        ndisk = "/var/lib/nova/instances/#{instance}/disk"
-        printf("Processing: %s ... ", instance)
-        starttime = Time.now.to_i
-        guest_instance = OSInspect.inspect_disk(ndisk)
-        endtime = Time.now.to_i
-        printf("[%d seconds]\n", endtime-starttime)
-        # Unmount hypervisor
-        # TODO: Need to fix this unmount. Complains dev is busy
-        system("fusermount -u -z /var/lib/nova")
-        return guest_instance 
-      else 
-        printf("[NOT FOUND]\n")
-        exit 1
+    oshype = `nova show #{instance} | grep "hypervisor_hostname" | awk '{print $4}'`
+    oshype = oshype.chomp
+    if oshype != ""
+      printf("[FOUND]\n")
+      guest_instance = OsGuest.new
+      printf("Mounting hypervisor: %s\n", oshype)
+      # unless system("sshfs -o Ciphers=arcfour -o Compression=no root\@#{oshype}\:/var/lib/nova /var/lib/nova") 
+      unless system("sshfs root\@#{oshype}\:/var/lib/nova /var/lib/nova") 
+        printf("Failed to mount hypervisor %s\n",oshype);
+        printf("Exiting\n");
+        exit 1;
       end
+      ndisk = "/var/lib/nova/instances/#{instance}/disk"
+      printf("Processing: %s ... ", instance)
+      starttime = Time.now.to_i
+      guest_instance = OSInspect.inspect_disk(ndisk)
+      endtime = Time.now.to_i
+      printf("[%d seconds]\n", endtime-starttime)
+      # Unmount hypervisor
+      # TODO: Need to fix this unmount. Complains dev is busy
+      system("fusermount -u -z /var/lib/nova")
+      return guest_instance 
+    else 
+      printf("[NOT FOUND]\n")
+      exit 1
     end
-
     guest_instance = OsGuest.new
     return guest_instance
   end
