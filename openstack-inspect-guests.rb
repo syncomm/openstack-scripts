@@ -148,7 +148,6 @@ module OSInspect
       printf("Exiting!\n");
       exit 1;
     end
-    # debug: printf("Openstack Username: %s\n",oscreds.username);
     # fog doesn't yet have hypervisor-list api support! Ugh
     *hypervisors = `nova hypervisor-list | grep -v "Hypervisor hostname" | grep -v "+----" | awk '{ print $4 }'`
     return hypervisors
@@ -165,9 +164,9 @@ module OSInspect
                                         :openstack_username => oscreds.username    , 
                                         :openstack_api_key  => oscreds.password    ,
                                         :openstack_tenant   => oscreds.tenant_name)
-    response = openstack_client.servers.get(instance)
-    oshype = response.os_ext_srv_attr_hypervisor_hostname
-    if oshype != ""
+    server = openstack_client.servers.get(instance)
+    if server
+      oshype = server.os_ext_srv_attr_hypervisor_hostname
       printf("[FOUND]\n")
       guest_instance = OsGuest.new
       printf("Mounting hypervisor: %s\n", oshype)
