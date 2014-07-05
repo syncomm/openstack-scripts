@@ -1,4 +1,4 @@
-#! /usr/bin/ruby -w
+#! /usr/bin/ruby 
 
 #########################################################################
 # Script: openstack-inspect-guests.rb                                   #
@@ -26,8 +26,10 @@
 #                                                                       #
 #########################################################################
 
+require 'rubygems'
 require 'guestfs'
 require 'optparse'
+require 'fog'
 
 module OSInspect
 
@@ -100,7 +102,14 @@ module OSInspect
           printf("%s (ignored)\n", msg)
         end
       end
-    
+      
+      # Get application list
+      # Takes a LONG time
+      #applist = g.inspect_list_applications2(root);
+      #applist.each do |app|
+      #  printf("%s (%s)\n",app["app2_display_name"], app["app2_version"])
+      #end
+
       # Set basic information about the guest
       guest.product = g.inspect_get_product_name(root);
       guest.type = g.inspect_get_type(root);
@@ -148,8 +157,16 @@ module OSInspect
   def OSInspect.get_instance instance,oscreds
     printf("Finding Instance %s ... ", instance)
     # Search for instance
-    oshype = `nova show #{instance} | grep "hypervisor_hostname" | awk '{print $4}'`
-    oshype = oshype.chomp
+    if !oscreds.auth_url.match(/tokens/)
+      oscreds.auth_url = oscreds.auth_url + "tokens"
+    end
+    openstack_client = Fog::Compute.new(:provider           => 'openstack'         ,
+                                        :openstack_auth_url => oscreds.auth_url    ,
+                                        :openstack_username => oscreds.username    , 
+                                        :openstack_api_key  => oscreds.password    ,
+                                        :openstack_tenant   => oscreds.tenant_name)
+    response = openstack_client.servers.get(instance)
+    oshype = response.os_ext_srv_attr_hypervisor_hostname
     if oshype != ""
       printf("[FOUND]\n")
       guest_instance = OsGuest.new
@@ -282,6 +299,7 @@ module OSInspect
 
       # Output 
       instances.each_key do |instance|
+        printf("\n")
         printf("Instance %s\n", instance)
         OSInspect.show_guest_human(instances[instance])
       end
